@@ -1,0 +1,27 @@
+type: http_request
+model: http_request
+id: rq_3UM5wVzWu3
+createdAt: 2025-12-27T15:39:01.298336
+updatedAt: 2025-12-28T17:34:34.324907
+workspaceId: wk_z7CUmeeTbX
+folderId: null
+authentication: {}
+authenticationType: null
+body:
+  text: |-
+    {
+      "resume_text": "Mohamed El‑Sayed\nCairo, Egypt · +20 1X XXX XXXX · mohamed.el@example.com · linkedin.com/in/mohamed-elsayed · github.com/melsayed\n\nProfessional Summary\nExperienced Software Engineer with 6+ years building scalable web and data systems. Strong background in Python, distributed services, and ML pipelines. Proven track record delivering end-to-end features from data ingestion and model training to production deployment on AWS. Seeking roles in backend engineering or machine learning engineering.\n\nTechnical Skills\n- Languages: Python, Java, JavaScript (ES6)\n- ML / Data: scikit-learn, TensorFlow, pandas, NumPy, PyTorch\n- Backend: Flask, FastAPI, Spring Boot\n- Frontend: React, TypeScript, HTML/CSS\n- Cloud / DevOps: AWS (EC2, S3, Lambda), Docker, Kubernetes, Terraform, CI/CD (GitHub Actions)\n- Databases: PostgreSQL, MySQL, MongoDB, Redis\n- Tools: Git, Jira, Prometheus, Grafana\n\nProfessional Experience\nSenior Software Engineer — Atlas Analytics, Cairo\nMar 2021 – Present\n- Led design and implementation of a microservices architecture for analytics ingestion, processing ~200k events/day.\n- Built and maintained ML pipeline for resume classification: preprocessing, TF‑IDF feature extraction, model training (SVM/Logistic Regression ensemble), and A/B testing; improved classification F1 by 8%.\n- Containerized services with Docker and orchestrated deployments on Kubernetes; automated CI/CD with GitHub Actions.\n- Implemented monitoring and alerting (Prometheus + Grafana) reducing incident MTTR by 40%.\n\nSoftware Engineer — BrightWeb Solutions, Cairo\nJan 2018 – Feb 2021\n- Developed REST APIs in Flask and Spring Boot to support customer-facing web applications.\n- Integrated third-party payment gateways and implemented secure authentication (JWT, OAuth2).\n- Optimized SQL queries and redesigned DB indices, improving response times by up to 60%.\n- Mentored junior developers and led code reviews to improve code quality and testing coverage.\n\nSelected Projects\n- Resume Classifier Prototype: End-to-end pipeline (data cleaning, TF‑IDF, ensemble classifier, Flask API). Deployed model artifacts to S3 and served predictions via a REST endpoint.\n- Real-time ETL: Built a streaming ETL that cleans, enriches, and loads data into a data warehouse using Kafka and Airflow (proof of concept).\n- Personal: Open-source tool for resume parsing and keyword extraction (GitHub repo with unit tests and docs).\n\nEducation\nB.Sc. in Computer Engineering — Cairo University\n2013 – 2017\n\nCertifications\n- AWS Certified Solutions Architect – Associate\n- Coursera: Machine Learning Specialization (Andrew Ng)\n\nAdditional\n- Publications: “Practical ML Pipelines for Resume Classification” (internal whitepaper)\n- Languages: English (fluent), Arabic (native)\n- Interests: scalable systems, ML fairness, mentoring,",
+      "return_probabilities": true
+    }
+bodyType: application/json
+description: ''
+headers:
+- enabled: true
+  name: Content-Type
+  value: application/json
+  id: qEgXkk3Jxj
+method: POST
+name: predict
+sortPriority: -1766849882639.0
+url: ${[ SERVER_URL ]}/predict
+urlParameters: []

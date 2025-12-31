@@ -1,0 +1,14 @@
+type: workspace
+model: workspace
+id: wk_z7CUmeeTbX
+createdAt: 2025-12-27T15:37:56.288496
+updatedAt: 2025-12-27T15:37:56.288499
+authentication: {}
+authenticationType: null
+description: ''
+headers: []
+name: cv-classifier
+encryptionKeyChallenge: null
+settingValidateCertificates: true
+settingFollowRedirects: true
+settingRequestTimeout: 0
