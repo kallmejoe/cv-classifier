@@ -1,6 +1,6 @@
 # Resume Classifier
 
-A multiclass resume classification system using **Bag-of-Words** and classical ML algorithms (SVM, Logistic Regression, Naive Bayes ensemble).
+A multiclass resume classification system using **Bag-of-Words** and classical ML algorithms (SVM, Logistic Regression, Naive Bayes ensemble), with optional **GPU-accelerated neural network training**.
 
 ## Quick Start
 
@@ -10,8 +10,16 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install pandas scikit-learn numpy matplotlib seaborn flask
 
-# Train the model
+# (Optional) For GPU support - install PyTorch with CUDA
+pip install torch  # CPU only
+# OR for NVIDIA GPU:
+pip install torch --index-url https://download.pytorch.org/whl/cu121
+
+# Train the model (CPU - sklearn classifiers)
 python main.py
+
+# Train with GPU (neural network)
+python main.py --gpu
 
 # Run the API
 python api.py
@@ -20,6 +28,35 @@ python api.py
 python -m pytest tests/ -v
 ```
 
+## GPU Training
+
+The classifier supports GPU-accelerated training using PyTorch neural networks:
+
+```bash
+# Automatic GPU detection (uses CUDA if available, falls back to CPU)
+python main.py --gpu
+
+# Specify device explicitly
+python main.py --gpu --device cuda:0    # First NVIDIA GPU
+python main.py --gpu --device cuda:1    # Second NVIDIA GPU
+python main.py --gpu --device mps       # Apple Silicon GPU
+python main.py --gpu --device cpu       # Force CPU
+
+# Customize training parameters
+python main.py --gpu --epochs 100 --batch-size 128
+
+# Check GPU availability
+python -c "from src.gpu_utils import print_device_info; print_device_info()"
+```
+
+### GPU Requirements
+
+- **NVIDIA GPU**: CUDA 11.8+ and cuDNN
+- **Apple Silicon**: macOS 12.3+ (MPS backend)
+- **PyTorch**: 2.0+ recommended
+
+The system automatically falls back to CPU-based sklearn classifiers if PyTorch or GPU is not available.
+
 ## Project Structure
 
 ```
@@ -27,10 +64,12 @@ cv-classifier/
 ├── main.py                     # Training pipeline (entry point)
 ├── api.py                      # Flask REST API for predictions
 ├── src/
-│   ├── config.py               # All configuration (model params, paths, thresholds)
+│   ├── config.py               # All configuration (model params, paths, GPU settings)
 │   ├── preprocessing.py        # Text cleaning and normalization
 │   ├── feature_extraction.py   # TF-IDF Bag-of-Words vectorization
 │   ├── model.py                # Model training, ensemble, ResumePredictor
+│   ├── neural_model.py         # GPU-accelerated neural network classifier
+│   ├── gpu_utils.py            # GPU detection and utilities
 │   ├── augmentation.py         # Data augmentation (token-level)
 │   ├── evaluation.py           # Metrics and visualization
 │   ├── category_mapper.py      # Category normalization and mapping
@@ -109,6 +148,8 @@ pred_config = PredictionConfig(
 
 ## Model Details
 
+### CPU Mode (Default - sklearn)
+
 **Architecture:** Soft-voting ensemble of:
 - Linear SVM (weight: 2)
 - Logistic Regression (weight: 2)
@@ -119,9 +160,23 @@ pred_config = PredictionConfig(
 - Unigrams and bigrams
 - Hyperparameter tuning via GridSearchCV
 
+### GPU Mode (Neural Network)
+
+**Architecture:** Deep neural network:
+- Input: TF-IDF features (8,000 dimensions)
+- Hidden layers: 512 → 256 → 128 (ReLU, BatchNorm, Dropout)
+- Output: Softmax over classes
+
+**Features:**
+- Automatic mixed precision (FP16) on supported GPUs
+- Early stopping with validation monitoring
+- Learning rate scheduling (ReduceLROnPlateau)
+- Gradient clipping for stability
+
 **Confidence Calculation:**
 - Confidence = max(probability) across all classes
 - For soft voting: P(class) = weighted average of classifier probabilities
+- For neural net: P(class) = softmax output
 
 ## Datasets
 
@@ -227,7 +282,7 @@ Previous versions and utility scripts are preserved in `archive/`:
 
 This implementation uses classical ML only:
 - No deep learning or transformers
-- No word embeddings  
+- No word embeddings
 - No NLP libraries (spaCy, NLTK for parsing)
 - Pure TF-IDF statistical features
 - Classical algorithms (SVM, LR, NB)

@@ -5,10 +5,16 @@ This module consolidates all model-related functionality:
 - Ensemble creation
 - Model saving/loading
 - Prediction with confidence calculation
+- GPU-accelerated neural network training (optional)
 
 The confidence calculation uses probability scores from the classifier.
 For models that don't support predict_proba natively (like LinearSVC),
 we use CalibratedClassifierCV to obtain probability estimates.
+
+GPU Support:
+- Automatically detects NVIDIA CUDA and Apple Metal (MPS) GPUs
+- Uses PyTorch for GPU-accelerated neural network training
+- Falls back to CPU-based sklearn classifiers when GPU not available
 """
 
 import os
@@ -36,6 +42,28 @@ from src.category_hierarchy import (
     ConfidenceThresholds,
     DEFAULT_THRESHOLDS,
 )
+
+# GPU and Neural model imports (optional)
+try:
+    from src.gpu_utils import (
+        get_device,
+        is_gpu_available,
+        print_device_info,
+        is_torch_available
+    )
+    from src.neural_model import NeuralClassifier, check_neural_model_available
+    GPU_SUPPORT_AVAILABLE = True
+except ImportError:
+    GPU_SUPPORT_AVAILABLE = False
+
+    def is_gpu_available():
+        return False
+
+    def is_torch_available():
+        return False
+
+    def check_neural_model_available():
+        return False
 
 
 def tune_hyperparameters(
@@ -115,26 +143,26 @@ def tune_all_classifiers(
 ) -> Dict[str, Tuple[Any, float]]:
     """
     Tune multiple classifiers and return all with their CV scores.
-    
+
     Args:
         X_train: Training feature matrix
         y_train: Training labels
         config: Model configuration
         fast_mode: If True, use reduced param grids for speed (default: True)
-        
+
     Returns:
         Dict mapping classifier name to (fitted_model, cv_score)
     """
     config = config or DEFAULT_MODEL_CONFIG
     results: Dict[str, Tuple[Any, float]] = {}
-    
+
     # Use fewer CV folds for faster tuning in fast mode
     cv_folds = 3 if fast_mode else config.cv_folds
-    
+
     print("\n" + "="*60)
     print(f"HYPERPARAMETER TUNING {'(FAST MODE)' if fast_mode else ''}")
     print("="*60)
-    
+
     # 1. LinearSVC - excellent for text classification
     print("\n[1/5] Tuning LinearSVC...")
     svm_grid = GridSearchCV(
@@ -145,7 +173,7 @@ def tune_all_classifiers(
     svm_grid.fit(X_train, y_train)
     results['LinearSVC'] = (svm_grid.best_estimator_, svm_grid.best_score_)
     print(f"  Best C={svm_grid.best_params_['C']}, CV={svm_grid.best_score_:.4f}")
-    
+
     # 2. Logistic Regression - robust and interpretable
     print("\n[2/5] Tuning LogisticRegression...")
     lr_grid = GridSearchCV(
@@ -156,7 +184,7 @@ def tune_all_classifiers(
     lr_grid.fit(X_train, y_train)
     results['LogisticRegression'] = (lr_grid.best_estimator_, lr_grid.best_score_)
     print(f"  Best C={lr_grid.best_params_['C']}, CV={lr_grid.best_score_:.4f}")
-    
+
     # 3. MultinomialNB - fast and works well with TF-IDF
     print("\n[3/5] Tuning MultinomialNB...")
     nb_grid = GridSearchCV(
@@ -167,7 +195,7 @@ def tune_all_classifiers(
     nb_grid.fit(X_train, y_train)
     results['MultinomialNB'] = (nb_grid.best_estimator_, nb_grid.best_score_)
     print(f"  Best alpha={nb_grid.best_params_['alpha']}, CV={nb_grid.best_score_:.4f}")
-    
+
     # 4. SGDClassifier - very fast, scalable linear classifier
     print("\n[4/5] Tuning SGDClassifier...")
     sgd_grid = GridSearchCV(
@@ -178,7 +206,7 @@ def tune_all_classifiers(
     sgd_grid.fit(X_train, y_train)
     results['SGDClassifier'] = (sgd_grid.best_estimator_, sgd_grid.best_score_)
     print(f"  Best alpha={sgd_grid.best_params_['alpha']}, loss={sgd_grid.best_params_['loss']}, CV={sgd_grid.best_score_:.4f}")
-    
+
     # 5. OneVsRest with MultinomialNB (from notebook approach)
     print("\n[5/5] Tuning OneVsRest(MultinomialNB)...")
     ovr_nb = OneVsRestClassifier(MultinomialNB(alpha=nb_grid.best_params_['alpha']))
@@ -186,7 +214,7 @@ def tune_all_classifiers(
     ovr_nb.fit(X_train, y_train)
     results['OneVsRest_NB'] = (ovr_nb, ovr_scores.mean())
     print(f"  CV={ovr_scores.mean():.4f}")
-    
+
     # Summary
     print("\n" + "="*60)
     print("CLASSIFIER RANKING")
@@ -194,8 +222,94 @@ def tune_all_classifiers(
     sorted_results = sorted(results.items(), key=lambda x: x[1][1], reverse=True)
     for i, (name, (_, score)) in enumerate(sorted_results, 1):
         print(f"  {i}. {name}: {score:.4f}")
-    
+
     return results
+
+
+def train_neural_classifier(
+    X_train: scipy.sparse.csr_matrix,
+    y_train: np.ndarray,
+    X_val: Optional[scipy.sparse.csr_matrix] = None,
+    y_val: Optional[np.ndarray] = None,
+    config: Optional[ModelConfig] = None,
+    label_encoder: Any = None
+) -> Tuple[Any, float]:
+    """
+    Train a GPU-accelerated neural network classifier.
+
+    This function provides an alternative to the sklearn-based classifiers
+    that can leverage NVIDIA CUDA GPUs for faster training on large datasets.
+
+    Args:
+        X_train: Training feature matrix (sparse TF-IDF)
+        y_train: Training labels (encoded as integers)
+        X_val: Validation feature matrix (optional)
+        y_val: Validation labels (optional)
+        config: Model configuration
+        label_encoder: Label encoder for converting labels (optional)
+
+    Returns:
+        Tuple of (fitted NeuralClassifier, validation accuracy)
+
+    Raises:
+        ImportError: If PyTorch is not installed
+    """
+    if not check_neural_model_available():
+        raise ImportError(
+            "Neural network training requires PyTorch. "
+            "Install with: pip install torch"
+        )
+
+    config = config or DEFAULT_MODEL_CONFIG
+    gpu_config = config.gpu
+
+    print("\n" + "="*60)
+    print("NEURAL NETWORK TRAINING (GPU-ACCELERATED)")
+    print("="*60)
+
+    # Print device info
+    if GPU_SUPPORT_AVAILABLE:
+        print_device_info()
+
+    # Determine device
+    device = None
+    if gpu_config.preferred_device != 'auto':
+        device = gpu_config.preferred_device
+
+    # Create neural classifier
+    classifier = NeuralClassifier(
+        hidden_dims=gpu_config.neural_hidden_dims,
+        dropout_rate=gpu_config.neural_dropout_rate,
+        batch_size=gpu_config.neural_batch_size,
+        epochs=gpu_config.neural_epochs,
+        learning_rate=gpu_config.neural_learning_rate,
+        early_stopping_patience=gpu_config.neural_early_stopping_patience,
+        device=device,
+        verbose=True,
+        random_state=config.random_state
+    )
+
+    # Convert labels if needed
+    if label_encoder is not None:
+        y_train_decoded = label_encoder.inverse_transform(y_train)
+        y_val_decoded = label_encoder.inverse_transform(y_val) if y_val is not None else None
+    else:
+        y_train_decoded = y_train
+        y_val_decoded = y_val
+
+    # Train the model
+    classifier.fit(X_train, y_train_decoded, X_val, y_val_decoded)
+
+    # Calculate validation accuracy
+    if X_val is not None and y_val_decoded is not None:
+        val_accuracy = classifier.score(X_val, y_val_decoded)
+        print(f"\nFinal Validation Accuracy: {val_accuracy:.4f}")
+    else:
+        # Use training accuracy if no validation set
+        val_accuracy = classifier.score(X_train, y_train_decoded)
+        print(f"\nFinal Training Accuracy: {val_accuracy:.4f}")
+
+    return classifier, val_accuracy
 
 
 def create_enhanced_ensemble(
@@ -207,61 +321,61 @@ def create_enhanced_ensemble(
 ) -> VotingClassifier:
     """
     Create an enhanced voting ensemble from top classifiers.
-    
+
     Args:
         classifiers: Dict from tune_all_classifiers
         X_train: Training feature matrix
         y_train: Training labels
         config: Model configuration
         top_n: Number of top classifiers to include
-        
+
     Returns:
         Fitted VotingClassifier ensemble
     """
     config = config or DEFAULT_MODEL_CONFIG
-    
+
     print("\n" + "="*60)
     print("CREATING ENHANCED ENSEMBLE")
     print("="*60)
-    
+
     # Sort by CV score and take top N
     sorted_clf = sorted(classifiers.items(), key=lambda x: x[1][1], reverse=True)[:top_n]
-    
+
     estimators = []
     weights = []
-    
+
     for name, (clf, score) in sorted_clf:
         print(f"  Including: {name} (CV={score:.4f})")
-        
+
         # Calibrate classifiers that don't support predict_proba
         if name in ['LinearSVC', 'SGDClassifier'] and hasattr(clf, 'decision_function'):
             clf_calibrated = CalibratedClassifierCV(clf, cv=3)
             estimators.append((name, clf_calibrated))
         else:
             estimators.append((name, clf))
-        
+
         # Weight by CV score (higher score = higher weight)
         weights.append(score)
-    
+
     # Normalize weights
     total_weight = sum(weights)
     weights = [w / total_weight * len(weights) for w in weights]
-    
+
     print(f"\n  Weights: {[f'{w:.2f}' for w in weights]}")
-    
+
     ensemble = VotingClassifier(
         estimators=estimators,
         voting='soft',
         weights=weights,
         n_jobs=-1
     )
-    
+
     print("\n  Fitting ensemble...")
     ensemble.fit(X_train, y_train)
-    
+
     scores = cross_val_score(ensemble, X_train, y_train, cv=config.cv_folds, scoring='accuracy')
     print(f"\n  ENSEMBLE CV: {scores.mean():.4f} (+/- {scores.std():.4f})")
-    
+
     return ensemble
 
 

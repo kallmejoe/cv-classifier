@@ -9,12 +9,19 @@ This script implements a comprehensive machine learning pipeline that can:
 - Apply data augmentation when beneficial
 - Use hyperparameter tuning and ensemble methods
 - Generate comprehensive evaluation reports
+- GPU-accelerated neural network training (optional)
 
 Methodology:
 - Bag-of-Words (TF-IDF) feature representation
 - Classical ML classifiers (Logistic Regression, SVM, Naive Bayes)
+- Optional GPU-accelerated neural network classifier
 - Optional ensemble voting for improved performance
 - Proper train/test split to prevent overfitting
+
+GPU Support:
+- Automatically detects NVIDIA CUDA and Apple Metal (MPS) GPUs
+- Enable with: config.gpu.use_neural_model = True
+- Falls back to CPU if no GPU available
 """
 
 import os
@@ -30,7 +37,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split, cross_val_score, learning_curve
 
 # Import from our modules
-from src.config import ModelConfig, PathConfig, DEFAULT_MODEL_CONFIG, DEFAULT_PATH_CONFIG
+from src.config import ModelConfig, PathConfig, GPUConfig, DEFAULT_MODEL_CONFIG, DEFAULT_PATH_CONFIG
 from src.preprocessing import preprocess_corpus
 from src.feature_extraction import FeatureExtractor
 from src.augmentation import TextAugmenter
@@ -42,6 +49,18 @@ from src.evaluation import (
 )
 from src.dataset_cleaner import get_clean_dataset
 from src.model import tune_hyperparameters, create_ensemble, save_model
+
+# GPU utilities (optional import)
+try:
+    from src.gpu_utils import is_gpu_available, print_device_info, is_torch_available
+    from src.model import train_neural_classifier
+    GPU_AVAILABLE = True
+except ImportError:
+    GPU_AVAILABLE = False
+    def is_gpu_available():
+        return False
+    def is_torch_available():
+        return False
 
 from importer import load_resume_csv, load_updated_resume_csv, load_corpus_dataset, load_combined_datasets
 
@@ -120,7 +139,8 @@ def plot_learning_curve(
 def main(
     dataset_mode: str = 'clean',
     model_config: Optional[ModelConfig] = None,
-    path_config: Optional[PathConfig] = None
+    path_config: Optional[PathConfig] = None,
+    use_gpu: bool = False
 ):
     """
     Main pipeline execution function.
@@ -135,10 +155,17 @@ def main(
             - 'all': All three datasets combined (raw, no cleaning)
         model_config: Model configuration (uses defaults if not provided)
         path_config: Path configuration (uses defaults if not provided)
+        use_gpu: If True, use GPU-accelerated neural network training
+                 (requires PyTorch with CUDA or MPS support)
     """
     # Use provided configs or defaults
     config = model_config or DEFAULT_MODEL_CONFIG
     paths = path_config or DEFAULT_PATH_CONFIG
+
+    # Handle GPU flag
+    if use_gpu:
+        config.gpu.use_neural_model = True
+        config.gpu.use_gpu = True
 
     # Set random seed
     np.random.seed(config.random_state)
@@ -147,7 +174,19 @@ def main(
     print("RESUME CLASSIFICATION PIPELINE - HIERARCHICAL VERSION")
     print(f"Dataset Mode: {dataset_mode.upper()}")
     print(f"Augmentation: {'ON' if config.use_augmentation else 'OFF'}")
-    print(f"Ensemble: {'ON' if config.use_ensemble else 'OFF'}")
+    print(f"Ensemble: {'ON' if config.use_ensemble and not config.gpu.use_neural_model else 'OFF'}")
+
+    # GPU status
+    if config.gpu.use_neural_model:
+        if GPU_AVAILABLE and is_torch_available():
+            gpu_status = "GPU (Neural Network)" if is_gpu_available() else "CPU (Neural Network)"
+        else:
+            gpu_status = "CPU (PyTorch not installed)"
+            print("  Warning: PyTorch not installed, falling back to sklearn classifiers")
+            config.gpu.use_neural_model = False
+    else:
+        gpu_status = "CPU (sklearn classifiers)"
+    print(f"Compute: {gpu_status}")
     print("="*70)
 
     # Ensure output directories exist
@@ -313,12 +352,39 @@ def main(
     # Import enhanced training functions
     from src.model import tune_all_classifiers, create_enhanced_ensemble
 
-    if config.use_ensemble:
+    # Check if we should use GPU neural network training
+    use_neural = config.gpu.use_neural_model and GPU_AVAILABLE and is_torch_available()
+
+    if use_neural:
+        # GPU-accelerated neural network training
+        print(f"\nTraining GPU-ACCELERATED Neural Network...")
+
+        # Create validation split from training data for early stopping
+        from sklearn.model_selection import train_test_split as val_split
+        X_train_nn, X_val_nn, y_train_nn, y_val_nn = val_split(
+            X_train, y_train,
+            test_size=0.15,
+            random_state=config.random_state,
+            stratify=y_train
+        )
+
+        # Get label encoder for converting back to original labels
+        label_encoder = feature_extractor.label_encoder
+
+        best_model, val_acc = train_neural_classifier(
+            X_train_nn, y_train_nn,
+            X_val_nn, y_val_nn,
+            config=config,
+            label_encoder=label_encoder
+        )
+        model_name = "Neural Network (GPU-Accelerated)"
+
+    elif config.use_ensemble:
         print(f"\nTraining ENHANCED ensemble with multiple classifiers...")
-        
+
         # Tune all classifiers (fast mode for speed)
         all_classifiers = tune_all_classifiers(X_train, y_train, config, fast_mode=True)
-        
+
         # Create enhanced ensemble from top 3 classifiers
         best_model = create_enhanced_ensemble(all_classifiers, X_train, y_train, config, top_n=3)
         model_name = "Enhanced Ensemble (Top 5 Classifiers)"
@@ -342,32 +408,39 @@ def main(
         best_model.fit(X_train, y_train)
 
     # =========================================================================
-    # STEP 7: Learning Curve Analysis
+    # STEP 7: Learning Curve Analysis (skip for neural network)
     # =========================================================================
-    print("\n" + "-"*70)
-    print("STEP 7: Learning Curve Analysis")
-    print("-"*70)
+    if not use_neural:
+        print("\n" + "-"*70)
+        print("STEP 7: Learning Curve Analysis")
+        print("-"*70)
 
-    train_scores, val_scores = plot_learning_curve(
-        best_model,
-        X_train,
-        y_train,
-        title=f"Learning Curve - {model_name}",
-        cv=config.cv_folds,
-        save_path=os.path.join(paths.output_dir, 'learning_curve.png'),
-        random_state=config.random_state
-    )
+        train_scores, val_scores = plot_learning_curve(
+            best_model,
+            X_train,
+            y_train,
+            title=f"Learning Curve - {model_name}",
+            cv=config.cv_folds,
+            save_path=os.path.join(paths.output_dir, 'learning_curve.png'),
+            random_state=config.random_state
+        )
 
-    final_gap = train_scores[-1] - val_scores[-1]
-    print(f"\nLearning Curve Analysis:")
-    print(f"  - Final training score: {train_scores[-1]:.4f}")
-    print(f"  - Final validation score: {val_scores[-1]:.4f}")
-    print(f"  - Train-validation gap: {final_gap:.4f}")
+        final_gap = train_scores[-1] - val_scores[-1]
+        print(f"\nLearning Curve Analysis:")
+        print(f"  - Final training score: {train_scores[-1]:.4f}")
+        print(f"  - Final validation score: {val_scores[-1]:.4f}")
+        print(f"  - Train-validation gap: {final_gap:.4f}")
 
-    if final_gap > 0.1:
-        print(f"  Warning: Large gap suggests potential overfitting")
+        if final_gap > 0.1:
+            print(f"  Warning: Large gap suggests potential overfitting")
+        else:
+            print(f"  Good generalization")
     else:
-        print(f"  Good generalization")
+        print("\n" + "-"*70)
+        print("STEP 7: Learning Curve Analysis - SKIPPED (Neural Network)")
+        print("-"*70)
+        print("  Neural network training history is logged during training.")
+        # For neural networks, learning curve is tracked during training
 
     # =========================================================================
     # STEP 8: Test Set Evaluation
@@ -427,7 +500,8 @@ def main(
     print(f"\nOutput files saved to:")
     print(f"  - {paths.output_dir}/confusion_matrix.png")
     print(f"  - {paths.output_dir}/class_distribution.png")
-    print(f"  - {paths.output_dir}/learning_curve.png")
+    if not use_neural:
+        print(f"  - {paths.output_dir}/learning_curve.png")
     print(f"  - {paths.model_dir}/resume_classifier.pkl")
     print(f"  - {paths.model_dir}/feature_extractor.pkl")
     print(f"  - {paths.model_dir}/metadata.pkl")
@@ -440,21 +514,88 @@ def main(
 
 
 if __name__ == '__main__':
-    # Run with cleaned dataset including corpus for maximum performance
-    # The 'clean' mode uses the new dataset_cleaner which:
-    # - Removes mislabeled samples (AUTOMOBILE, BPO issues)
-    # - Normalizes category names to match hierarchy
-    # - Includes 30K+ tech samples from the corpus
-    
-    # You can customize the configuration:
-    # config = ModelConfig(
-    #     use_augmentation=True,
-    #     augmentation_factor=2,
-    #     use_ensemble=True,
-    #     test_size=0.2,
-    #     cv_folds=5
-    # )
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description='Resume Classification Pipeline',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python main.py                          # Train with CPU (sklearn classifiers)
+  python main.py --gpu                    # Train with GPU (neural network)
+  python main.py --dataset resume         # Use only Resume.csv dataset
+  python main.py --gpu --epochs 100       # GPU training with 100 epochs
+  python main.py --device cuda:1          # Use specific GPU device
+        """
+    )
+
+    parser.add_argument(
+        '--dataset', '-d',
+        type=str,
+        default='clean',
+        choices=['clean', 'resume', 'updated', 'corpus', 'both', 'all'],
+        help='Dataset mode (default: clean)'
+    )
+    parser.add_argument(
+        '--gpu', '-g',
+        action='store_true',
+        help='Use GPU-accelerated neural network training'
+    )
+    parser.add_argument(
+        '--device',
+        type=str,
+        default='auto',
+        help='Compute device: auto, cuda, cuda:0, cuda:1, mps, cpu (default: auto)'
+    )
+    parser.add_argument(
+        '--epochs',
+        type=int,
+        default=50,
+        help='Number of training epochs for neural network (default: 50)'
+    )
+    parser.add_argument(
+        '--batch-size',
+        type=int,
+        default=64,
+        help='Batch size for neural network training (default: 64)'
+    )
+    parser.add_argument(
+        '--no-augmentation',
+        action='store_true',
+        help='Disable data augmentation'
+    )
+    parser.add_argument(
+        '--no-ensemble',
+        action='store_true',
+        help='Disable ensemble (use single best model for sklearn)'
+    )
+
+    args = parser.parse_args()
+
+    # Build configuration
+    gpu_config = GPUConfig(
+        use_gpu=args.gpu,
+        use_neural_model=args.gpu,
+        preferred_device=args.device,
+        neural_epochs=args.epochs,
+        neural_batch_size=args.batch_size
+    )
+
+    config = ModelConfig(
+        use_augmentation=not args.no_augmentation,
+        use_ensemble=not args.no_ensemble,
+        gpu=gpu_config
+    )
+
+    # Print GPU info if using GPU
+    if args.gpu and GPU_AVAILABLE and is_torch_available():
+        print("\n" + "="*70)
+        print("GPU TRAINING MODE ENABLED")
+        print("="*70)
+        print_device_info()
 
     results, classifier, extractor = main(
-        dataset_mode='clean',  # Use cleaned dataset with corpus (RECOMMENDED)
+        dataset_mode=args.dataset,
+        model_config=config,
+        use_gpu=args.gpu
     )
