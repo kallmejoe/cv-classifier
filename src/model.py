@@ -377,7 +377,7 @@ def load_model(
     model_path = path_config.get_model_path()
     if not os.path.exists(model_path):
         raise FileNotFoundError(
-            f"Model not found: {model_path}. Run main.py first to train a model."
+            f"Model not found: {model_path}. Run 'python train.py' first to train a model."
         )
 
     with open(model_path, 'rb') as f:
