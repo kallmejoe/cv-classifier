@@ -13,6 +13,10 @@ from typing import Dict, List, Tuple, Optional, Set
 from collections import defaultdict, Counter
 import hashlib
 
+from src.utils.logging_utils import get_logger
+
+logger = get_logger()
+
 
 def compute_text_hash(text: str) -> str:
     """Compute MD5 hash of normalized text for fast duplicate detection."""
@@ -195,21 +199,16 @@ class DataQualityChecker:
         Returns:
             Dictionary of quality metrics
         """
-        # Basic counts
         total = len(resumes)
         unique_resumes = len(set(compute_text_hash(r) for r in resumes))
         unique_categories = len(set(categories))
         
-        # Length statistics
         lengths = [len(r) for r in resumes]
         avg_length = sum(lengths) / total if total > 0 else 0
         min_length = min(lengths) if lengths else 0
         max_length = max(lengths) if lengths else 0
         
-        # Short resume count (< 100 chars)
         short_resumes = sum(1 for l in lengths if l < 100)
-        
-        # Empty resume count
         empty_resumes = sum(1 for r in resumes if not r or not r.strip())
         
         # Category distribution
@@ -281,48 +280,48 @@ class DataQualityChecker:
     def print_quality_report(self) -> None:
         """Print a formatted data quality report."""
         if not self.quality_metrics:
-            print("No quality metrics computed. Run compute_quality_metrics() first.")
+            logger.warning("No quality metrics computed. Run compute_quality_metrics() first.")
             return
         
         m = self.quality_metrics
         
-        print("\n" + "="*70)
-        print("DATA QUALITY REPORT")
-        print("="*70)
+        logger.info("\n" + "="*70)
+        logger.info("DATA QUALITY REPORT")
+        logger.info("="*70)
         
         # Sample statistics
-        print("\n📊 SAMPLE STATISTICS:")
-        print(f"   Total samples:        {m['total_samples']:,}")
-        print(f"   Unique resumes:       {m['unique_resumes']:,}")
-        print(f"   Duplicates:           {m['duplicate_resumes']:,} ({m['duplicate_percentage']:.1f}%)")
-        print(f"   Unique categories:    {m['unique_categories']}")
+        logger.info("\n📊 SAMPLE STATISTICS:")
+        logger.info(f"   Total samples:        {m['total_samples']:,}")
+        logger.info(f"   Unique resumes:       {m['unique_resumes']:,}")
+        logger.info(f"   Duplicates:           {m['duplicate_resumes']:,} ({m['duplicate_percentage']:.1f}%)")
+        logger.info(f"   Unique categories:    {m['unique_categories']}")
         
         # Resume quality
-        print("\n📝 RESUME QUALITY:")
-        print(f"   Average length:       {m['avg_length']:,.0f} chars")
-        print(f"   Min length:           {m['min_length']:,} chars")
-        print(f"   Max length:           {m['max_length']:,} chars")
-        print(f"   Short resumes (<100): {m['short_resumes']:,}")
-        print(f"   Empty resumes:        {m['empty_resumes']:,}")
+        logger.info("\n📝 RESUME QUALITY:")
+        logger.info(f"   Average length:       {m['avg_length']:,.0f} chars")
+        logger.info(f"   Min length:           {m['min_length']:,} chars")
+        logger.info(f"   Max length:           {m['max_length']:,} chars")
+        logger.info(f"   Short resumes (<100): {m['short_resumes']:,}")
+        logger.info(f"   Empty resumes:        {m['empty_resumes']:,}")
         
         # Category balance
-        print("\n⚖️  CATEGORY BALANCE:")
-        print(f"   Min samples/category: {m['min_samples_per_category']:,}")
-        print(f"   Max samples/category: {m['max_samples_per_category']:,}")
-        print(f"   Imbalance ratio:      {m['imbalance_ratio']:.1f}x")
+        logger.info("\n⚖️  CATEGORY BALANCE:")
+        logger.info(f"   Min samples/category: {m['min_samples_per_category']:,}")
+        logger.info(f"   Max samples/category: {m['max_samples_per_category']:,}")
+        logger.info(f"   Imbalance ratio:      {m['imbalance_ratio']:.1f}x")
         
         # Issues
-        print("\n⚠️  ISSUES DETECTED:")
-        print(f"   Exact duplicate pairs: {m['exact_duplicate_pairs']:,}")
-        print(f"   Category conflicts:    {m['category_conflicts']:,}")
+        logger.info("\n⚠️  ISSUES DETECTED:")
+        logger.info(f"   Exact duplicate pairs: {m['exact_duplicate_pairs']:,}")
+        logger.info(f"   Category conflicts:    {m['category_conflicts']:,}")
         
         # Category conflicts details
         if self.category_conflicts:
-            print("\n🔀 CATEGORY CONFLICTS (top 5):")
+            logger.info("\n🔀 CATEGORY CONFLICTS (top 5):")
             for conflict in self.category_conflicts[:5]:
                 cats = ", ".join(conflict['categories'])
-                print(f"   [{conflict['count']} samples] {cats}")
-                print(f"      Sample: \"{conflict['sample']}...\"")
+                logger.info(f"   [{conflict['count']} samples] {cats}")
+                logger.info(f"      Sample: \"{conflict['sample']}...\"")
         
         # Quality score
         score = 100
@@ -337,16 +336,16 @@ class DataQualityChecker:
         
         score = max(0, score)
         
-        print(f"\n📈 OVERALL QUALITY SCORE: {score}/100")
+        logger.info(f"\n📈 OVERALL QUALITY SCORE: {score}/100")
         
         if score >= 80:
-            print("   ✅ Good quality dataset")
+            logger.info("   ✅ Good quality dataset")
         elif score >= 60:
-            print("   ⚠️  Some issues need attention")
+            logger.info("   ⚠️  Some issues need attention")
         else:
-            print("   ❌ Significant quality issues - cleaning recommended")
+            logger.info("   ❌ Significant quality issues - cleaning recommended")
         
-        print("="*70)
+        logger.info("="*70)
 
 
 def clean_dataset(
@@ -375,11 +374,11 @@ def clean_dataset(
     Returns:
         Tuple of (cleaned_resumes, cleaned_categories)
     """
-    from .category_mapper import map_category
+    from .utils.category_utils import normalize_category
     
     if verbose:
-        print("\n🧹 Cleaning dataset...")
-        print(f"   Initial size: {len(resumes)} samples")
+        logger.info("\n🧹 Cleaning dataset...")
+        logger.info(f"   Initial size: {len(resumes)} samples")
     
     cleaned_resumes = list(resumes)
     cleaned_categories = list(categories)
@@ -394,16 +393,16 @@ def clean_dataset(
             cleaned_categories = list(cleaned_categories)
         if verbose:
             removed = len(resumes) - len(cleaned_resumes)
-            print(f"   Removed {removed} short/empty resumes")
+            logger.info(f"   Removed {removed} short/empty resumes")
     
     # Step 2: Normalize categories
     if normalize_categories:
         cleaned_categories = [
-            map_category(cat, resume) 
-            for cat, resume in zip(cleaned_categories, cleaned_resumes)
+            normalize_category(cat) 
+            for cat in cleaned_categories
         ]
         if verbose:
-            print(f"   Normalized {len(set(categories))} → {len(set(cleaned_categories))} categories")
+            logger.info(f"   Normalized {len(set(categories))} → {len(set(cleaned_categories))} categories")
     
     # Step 3: Remove duplicates (keep most specific)
     if remove_duplicates:
@@ -413,9 +412,9 @@ def clean_dataset(
             cleaned_resumes, cleaned_categories, strategy=strategy
         )
         if verbose:
-            print(f"   Removed duplicates → {len(cleaned_resumes)} samples")
+            logger.info(f"   Removed duplicates → {len(cleaned_resumes)} samples")
     
     if verbose:
-        print(f"   Final size: {len(cleaned_resumes)} samples")
+        logger.info(f"   Final size: {len(cleaned_resumes)} samples")
     
     return cleaned_resumes, cleaned_categories

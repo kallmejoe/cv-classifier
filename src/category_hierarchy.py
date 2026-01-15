@@ -420,23 +420,3 @@ def select_by_confidence(
             requires_review=True,
             top_suggestions=top_predictions
         )
-
-
-def print_hierarchy_tree() -> None:
-    """Print the full category hierarchy tree for debugging."""
-    print("\n" + "=" * 70)
-    print("CATEGORY HIERARCHY TREE")
-    print("=" * 70)
-    
-    for domain, specializations in CATEGORY_TREE.items():
-        print(f"\n{domain}")
-        for spec, categories in specializations.items():
-            print(f"  └── {spec}")
-            for i, cat in enumerate(categories):
-                prefix = "      └── " if i == len(categories) - 1 else "      ├── "
-                print(f"{prefix}{cat}")
-    
-    print("\n" + "=" * 70)
-    print(f"Total domains: {len(CATEGORY_TREE)}")
-    print(f"Total leaf categories: {len(CATEGORY_PATHS)}")
-    print("=" * 70)

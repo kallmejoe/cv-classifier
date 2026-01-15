@@ -17,14 +17,9 @@ from typing import Dict, Any, Optional, Tuple, List
 
 import numpy as np
 from sklearn.linear_model import LogisticRegression, SGDClassifier
-from sklearn.svm import LinearSVC, SVC
+from sklearn.svm import LinearSVC
 from sklearn.naive_bayes import MultinomialNB
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.ensemble import (
-    RandomForestClassifier,
-    GradientBoostingClassifier,
-    VotingClassifier,
-)
+from sklearn.ensemble import VotingClassifier
 from sklearn.model_selection import cross_val_score, GridSearchCV
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.multiclass import OneVsRestClassifier
@@ -38,6 +33,10 @@ from src.config import (
 )
 from src.preprocessing import preprocess_text
 from src.feature_extraction import FeatureExtractor
+from src.utils.logging_utils import get_logger
+from src.utils.display_utils import print_header, print_step
+
+logger = get_logger()
 from src.category_hierarchy import (
     select_by_confidence,
     get_category_path,
@@ -68,9 +67,8 @@ def tune_hyperparameters(
     """
     config = config or DEFAULT_MODEL_CONFIG
 
-    print("\nHyperparameter Tuning...")
+    logger.info("Hyperparameter Tuning...")
 
-    # SVM tuning
     svm_grid = GridSearchCV(
         LinearSVC(
             random_state=config.random_state, class_weight="balanced", dual="auto"
@@ -82,9 +80,8 @@ def tune_hyperparameters(
         verbose=0,
     )
     svm_grid.fit(X_train, y_train)
-    print(f"  SVM best: C={svm_grid.best_params_['C']}, CV={svm_grid.best_score_:.4f}")
+    logger.info(f"  SVM best: C={svm_grid.best_params_['C']}, CV={svm_grid.best_score_:.4f}")
 
-    # Logistic Regression tuning
     lr_grid = GridSearchCV(
         LogisticRegression(
             random_state=config.random_state, solver="lbfgs", class_weight="balanced"
@@ -96,14 +93,13 @@ def tune_hyperparameters(
         verbose=0,
     )
     lr_grid.fit(X_train, y_train)
-    print(f"  LR best: C={lr_grid.best_params_['C']}, CV={lr_grid.best_score_:.4f}")
+    logger.info(f"  LR best: C={lr_grid.best_params_['C']}, CV={lr_grid.best_score_:.4f}")
 
-    # Naive Bayes (no tuning needed, use configured alpha)
     nb = MultinomialNB(alpha=config.nb_alpha)
     nb_scores = cross_val_score(
         nb, X_train, y_train, cv=config.cv_folds, scoring="accuracy"
     )
-    print(f"  NB: alpha={config.nb_alpha}, CV={nb_scores.mean():.4f}")
+    logger.info(f"  NB: alpha={config.nb_alpha}, CV={nb_scores.mean():.4f}")
 
     return svm_grid.best_estimator_, lr_grid.best_estimator_, nb
 
@@ -129,15 +125,12 @@ def tune_all_classifiers(
     config = config or DEFAULT_MODEL_CONFIG
     results: Dict[str, Tuple[Any, float]] = {}
 
-    # Use fewer CV folds for faster tuning in fast mode
     cv_folds = 3 if fast_mode else config.cv_folds
 
-    print("\n" + "=" * 60)
-    print(f"HYPERPARAMETER TUNING {'(FAST MODE)' if fast_mode else ''}")
-    print("=" * 60)
+    title = f"HYPERPARAMETER TUNING {'(FAST MODE)' if fast_mode else ''}"
+    print_header(title, width=60)
 
-    # 1. LinearSVC - excellent for text classification
-    print("\n[1/5] Tuning LinearSVC...")
+    print_step(1, 5, "Tuning LinearSVC...")
     svm_grid = GridSearchCV(
         LinearSVC(
             random_state=config.random_state,
@@ -152,10 +145,9 @@ def tune_all_classifiers(
     )
     svm_grid.fit(X_train, y_train)
     results["LinearSVC"] = (svm_grid.best_estimator_, svm_grid.best_score_)
-    print(f"  Best C={svm_grid.best_params_['C']}, CV={svm_grid.best_score_:.4f}")
+    logger.info(f"  Best C={svm_grid.best_params_['C']}, CV={svm_grid.best_score_:.4f}")
 
-    # 2. Logistic Regression - robust and interpretable
-    print("\n[2/5] Tuning LogisticRegression...")
+    print_step(2, 5, "Tuning LogisticRegression...")
     lr_grid = GridSearchCV(
         LogisticRegression(
             random_state=config.random_state,
@@ -170,10 +162,9 @@ def tune_all_classifiers(
     )
     lr_grid.fit(X_train, y_train)
     results["LogisticRegression"] = (lr_grid.best_estimator_, lr_grid.best_score_)
-    print(f"  Best C={lr_grid.best_params_['C']}, CV={lr_grid.best_score_:.4f}")
+    logger.info(f"  Best C={lr_grid.best_params_['C']}, CV={lr_grid.best_score_:.4f}")
 
-    # 3. MultinomialNB - fast and works well with TF-IDF
-    print("\n[3/5] Tuning MultinomialNB...")
+    print_step(3, 5, "Tuning MultinomialNB...")
     nb_grid = GridSearchCV(
         MultinomialNB(),
         {"alpha": [0.01, 0.1, 0.5, 1.0]},
@@ -183,10 +174,9 @@ def tune_all_classifiers(
     )
     nb_grid.fit(X_train, y_train)
     results["MultinomialNB"] = (nb_grid.best_estimator_, nb_grid.best_score_)
-    print(f"  Best alpha={nb_grid.best_params_['alpha']}, CV={nb_grid.best_score_:.4f}")
+    logger.info(f"  Best alpha={nb_grid.best_params_['alpha']}, CV={nb_grid.best_score_:.4f}")
 
-    # 4. SGDClassifier - very fast, scalable linear classifier
-    print("\n[4/5] Tuning SGDClassifier...")
+    print_step(4, 5, "Tuning SGDClassifier...")
     sgd_grid = GridSearchCV(
         SGDClassifier(
             random_state=config.random_state,
@@ -201,27 +191,23 @@ def tune_all_classifiers(
     )
     sgd_grid.fit(X_train, y_train)
     results["SGDClassifier"] = (sgd_grid.best_estimator_, sgd_grid.best_score_)
-    print(
+    logger.info(
         f"  Best alpha={sgd_grid.best_params_['alpha']}, loss={sgd_grid.best_params_['loss']}, CV={sgd_grid.best_score_:.4f}"
     )
 
-    # 5. OneVsRest with MultinomialNB (from notebook approach)
-    print("\n[5/5] Tuning OneVsRest(MultinomialNB)...")
+    print_step(5, 5, "Tuning OneVsRest(MultinomialNB)...")
     ovr_nb = OneVsRestClassifier(MultinomialNB(alpha=nb_grid.best_params_["alpha"]))
     ovr_scores = cross_val_score(
         ovr_nb, X_train, y_train, cv=cv_folds, scoring="accuracy", n_jobs=-1
     )
     ovr_nb.fit(X_train, y_train)
     results["OneVsRest_NB"] = (ovr_nb, ovr_scores.mean())
-    print(f"  CV={ovr_scores.mean():.4f}")
+    logger.info(f"  CV={ovr_scores.mean():.4f}")
 
-    # Summary
-    print("\n" + "=" * 60)
-    print("CLASSIFIER RANKING")
-    print("=" * 60)
+    print_header("CLASSIFIER RANKING", width=60)
     sorted_results = sorted(results.items(), key=lambda x: x[1][1], reverse=True)
     for i, (name, (_, score)) in enumerate(sorted_results, 1):
-        print(f"  {i}. {name}: {score:.4f}")
+        logger.info(f"  {i}. {name}: {score:.4f}")
 
     return results
 
@@ -248,11 +234,8 @@ def create_enhanced_ensemble(
     """
     config = config or DEFAULT_MODEL_CONFIG
 
-    print("\n" + "=" * 60)
-    print("CREATING ENHANCED ENSEMBLE")
-    print("=" * 60)
+    print_header("CREATING ENHANCED ENSEMBLE", width=60)
 
-    # Sort by CV score and take top N
     sorted_clf = sorted(classifiers.items(), key=lambda x: x[1][1], reverse=True)[
         :top_n
     ]
@@ -261,84 +244,32 @@ def create_enhanced_ensemble(
     weights = []
 
     for name, (clf, score) in sorted_clf:
-        print(f"  Including: {name} (CV={score:.4f})")
+        logger.info(f"  Including: {name} (CV={score:.4f})")
 
-        # Calibrate classifiers that don't support predict_proba
         if name in ["LinearSVC", "SGDClassifier"] and hasattr(clf, "decision_function"):
             clf_calibrated = CalibratedClassifierCV(clf, cv=3)
             estimators.append((name, clf_calibrated))
         else:
             estimators.append((name, clf))
 
-        # Weight by CV score (higher score = higher weight)
         weights.append(score)
 
-    # Normalize weights
     total_weight = sum(weights)
     weights = [w / total_weight * len(weights) for w in weights]
 
-    print(f"\n  Weights: {[f'{w:.2f}' for w in weights]}")
+    logger.info(f"  Weights: {[f'{w:.2f}' for w in weights]}")
 
     ensemble = VotingClassifier(
         estimators=estimators, voting="soft", weights=weights, n_jobs=-1
     )
 
-    print("\n  Fitting ensemble...")
+    logger.info("  Fitting ensemble...")
     ensemble.fit(X_train, y_train)
 
     scores = cross_val_score(
         ensemble, X_train, y_train, cv=config.cv_folds, scoring="accuracy"
     )
-    print(f"\n  ENSEMBLE CV: {scores.mean():.4f} (+/- {scores.std():.4f})")
-
-    return ensemble
-
-
-def create_ensemble(
-    svm: Any,
-    lr: Any,
-    nb: Any,
-    X_train: scipy.sparse.csr_matrix,
-    y_train: np.ndarray,
-    config: Optional[ModelConfig] = None,
-) -> VotingClassifier:
-    """
-    Create a voting ensemble from individual classifiers.
-
-    The ensemble uses soft voting with calibrated probabilities.
-    SVM is wrapped in CalibratedClassifierCV to enable probability estimation.
-
-    Args:
-        svm: Trained SVM classifier
-        lr: Trained Logistic Regression classifier
-        nb: Trained Naive Bayes classifier
-        X_train: Training feature matrix
-        y_train: Training labels
-        config: Model configuration
-
-    Returns:
-        Fitted VotingClassifier ensemble
-    """
-    config = config or DEFAULT_MODEL_CONFIG
-
-    print("\nCreating Ensemble...")
-
-    # Calibrate SVM for soft voting (enables probability estimation)
-    svm_calibrated = CalibratedClassifierCV(svm, cv=3)
-
-    weights = config.ensemble_weights
-
-    ensemble = VotingClassifier(
-        estimators=[("svm", svm_calibrated), ("lr", lr), ("nb", nb)],
-        voting="soft",
-        weights=weights,
-    )
-
-    ensemble.fit(X_train, y_train)
-    scores = cross_val_score(
-        ensemble, X_train, y_train, cv=config.cv_folds, scoring="accuracy"
-    )
-    print(f"  Ensemble CV: {scores.mean():.4f} (+/- {scores.std():.4f})")
+    logger.info(f"  ENSEMBLE CV: {scores.mean():.4f} (+/- {scores.std():.4f})")
 
     return ensemble
 
@@ -381,7 +312,7 @@ def save_model(
     with open(path_config.get_metadata_path(), "wb") as f:
         pickle.dump(metadata, f)
 
-    print(f"\nModel saved to: {path_config.model_dir}/")
+    logger.info(f"Model saved to: {path_config.model_dir}/")
 
 
 def load_model(
@@ -471,7 +402,7 @@ class ResumePredictor:
     def _load_model(self) -> None:
         """Load model artifacts from disk."""
         self.model, self.feature_extractor, self.metadata = load_model(self.path_config)
-        print(f"Model loaded ({self.metadata['num_classes']} categories)")
+        logger.info(f"Model loaded ({self.metadata['num_classes']} categories)")
 
     def predict(self, resume_text: str, return_details: bool = False) -> Any:
         """
@@ -490,16 +421,13 @@ class ResumePredictor:
             If return_details=False: HierarchicalPrediction object
             If return_details=True: dict with full prediction details
         """
-        # Preprocess text
         processed_text = preprocess_text(
             resume_text, remove_stops=True, min_token_length=2
         )
 
-        # Transform to features
         assert self.feature_extractor is not None
         X, _ = self.feature_extractor.transform([processed_text], None)
 
-        # Get prediction and probabilities
         prediction = self.model.predict(X)[0]
         category = self.feature_extractor.decode_labels([prediction])[0]
 

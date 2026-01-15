@@ -231,11 +231,7 @@ class TestConfidenceCalculation:
         # Calculate expected confidence
         expected_confidence = float(np.max(ensemble_probs))
 
-        # Verify the calculation
-        # Class 0: (2*0.7 + 2*0.6 + 1*0.3) / 5 = (1.4 + 1.2 + 0.3) / 5 = 2.9/5 = 0.58
-        # Class 1: (2*0.2 + 2*0.3 + 1*0.5) / 5 = (0.4 + 0.6 + 0.5) / 5 = 1.5/5 = 0.30
-        # Class 2: (2*0.1 + 2*0.1 + 1*0.2) / 5 = (0.2 + 0.2 + 0.2) / 5 = 0.6/5 = 0.12
-
+        # Expected ensemble probabilities: [0.58, 0.30, 0.12]
         assert abs(ensemble_probs[0] - 0.58) < 0.01
         assert abs(ensemble_probs[1] - 0.30) < 0.01
         assert abs(ensemble_probs[2] - 0.12) < 0.01

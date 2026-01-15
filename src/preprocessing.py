@@ -79,29 +79,21 @@ def preprocess_text(
     if remove_html:
         text = clean_html_tags(text)
 
-    # Remove URLs
     text = re.sub(r'https?://\S+|www\.\S+', ' ', text)
 
-    # Remove email addresses
     text = re.sub(r'\S+@\S+\.\S+', ' ', text)
 
-    # Convert to lowercase
     text = text.lower()
 
-    # Remove non-alphabetic characters (keep only letters and spaces)
     text = re.sub(r'[^a-zA-Z\s]', ' ', text)
 
-    # Normalize whitespace
     text = ' '.join(text.split())
 
-    # Tokenize
     tokens = text.split()
 
-    # Remove stopwords if requested
     if remove_stops:
         tokens = [t for t in tokens if t not in STOPWORDS]
 
-    # Remove short tokens
     tokens = [t for t in tokens if len(t) >= min_token_length]
 
     return ' '.join(tokens)

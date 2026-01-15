@@ -6,6 +6,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import LabelEncoder
 from scipy.sparse import hstack, csr_matrix
 import scipy.sparse
+from .utils.validation_utils import require_fitted
 
 
 class FeatureExtractor:
@@ -92,12 +93,9 @@ class FeatureExtractor:
         self._is_fitted = True
         return self
 
+    @require_fitted
     def transform(self, texts: List[str], labels: Optional[List[str]] = None) -> Tuple[Any, Any]:
         """Transform texts and labels to numerical representations."""
-        if not self._is_fitted:
-            raise ValueError("FeatureExtractor must be fitted before transform()")
-
-        # Word features
         word_features = self.word_vectorizer.transform(texts)
         
         # Combine with character features if enabled
@@ -116,40 +114,33 @@ class FeatureExtractor:
         self.fit(texts, labels)
         return self.transform(texts, labels)
 
+    @require_fitted
     def get_feature_names(self) -> List[str]:
         """Get vocabulary feature names."""
-        if not self._is_fitted:
-            raise ValueError("FeatureExtractor must be fitted first")
-        
         word_features = list(self.word_vectorizer.get_feature_names_out())
         if self.char_vectorizer is not None:
             char_features = [f"char_{f}" for f in self.char_vectorizer.get_feature_names_out()]
             return word_features + char_features
         return word_features
 
+    @require_fitted
     def get_label_names(self) -> List[str]:
         """Get category names in order of encoded values."""
-        if not self._is_fitted:
-            raise ValueError("FeatureExtractor must be fitted first")
         return list(self.label_encoder.classes_)  # type: ignore
 
+    @require_fitted
     def get_vocabulary_size(self) -> int:
         """Get total vocabulary size (word + char features)."""
-        if not self._is_fitted:
-            raise ValueError("FeatureExtractor must be fitted first")
-        
         word_size = len(self.word_vectorizer.vocabulary_)  # type: ignore
         char_size = len(self.char_vectorizer.vocabulary_) if self.char_vectorizer else 0  # type: ignore
         return word_size + char_size
 
+    @require_fitted
     def get_num_classes(self) -> int:
         """Get number of unique classes."""
-        if not self._is_fitted:
-            raise ValueError("FeatureExtractor must be fitted first")
         return len(self.label_encoder.classes_)  # type: ignore
 
+    @require_fitted
     def decode_labels(self, encoded_labels: np.ndarray) -> List[str]:
         """Convert encoded labels back to category names."""
-        if not self._is_fitted:
-            raise ValueError("FeatureExtractor must be fitted first")
         return list(self.label_encoder.inverse_transform(encoded_labels))

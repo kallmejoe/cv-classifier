@@ -14,6 +14,9 @@ from typing import List, Tuple, Dict, Set, Optional
 from dataclasses import dataclass
 
 from src.category_hierarchy import get_all_leaf_categories, is_valid_category
+from src.utils.logging_utils import get_logger
+
+logger = get_logger()
 
 
 # =============================================================================
@@ -251,41 +254,6 @@ CATEGORY_NORMALIZATION: Dict[str, str] = {
 }
 
 
-def normalize_category_name(category: str) -> str:
-    """
-    Normalize a category name to match our hierarchy.
-
-    Args:
-        category: Raw category name
-
-    Returns:
-        Normalized category name
-    """
-    if not category or not isinstance(category, str):
-        return "Unknown"
-
-    category = category.strip()
-
-    # Check direct mapping
-    if category in CATEGORY_NORMALIZATION:
-        return CATEGORY_NORMALIZATION[category]
-
-    # If already valid, return as-is
-    if is_valid_category(category):
-        return category
-
-    # Try title case
-    title_case = category.title()
-    if is_valid_category(title_case):
-        return title_case
-
-    # If all uppercase, convert to title case
-    if category.isupper():
-        return category.title()
-
-    return category
-
-
 # =============================================================================
 # MAIN CLEANING FUNCTION
 # =============================================================================
@@ -318,9 +286,9 @@ def clean_dataset(
         Tuple of (cleaned_df, stats)
     """
     if verbose:
-        print("\n" + "=" * 70)
-        print("DATASET CLEANING")
-        print("=" * 70)
+        logger.info("\n" + "=" * 70)
+        logger.info("DATASET CLEANING")
+        logger.info("=" * 70)
 
     # Make copy to avoid modifying original
     df = df.copy()
@@ -329,19 +297,21 @@ def clean_dataset(
     removed_samples: List[Tuple[int, str, str]] = []
 
     if verbose:
-        print(f"\nOriginal: {original_count} samples, {original_categories} categories")
+        logger.info(f"\nOriginal: {original_count} samples, {original_categories} categories")
 
     # Step 1: Normalize category names
     if verbose:
-        print("\nStep 1: Normalizing category names...")
+        logger.info("\nStep 1: Normalizing category names...")
 
-    df["normalized_category"] = df[category_column].apply(normalize_category_name)
+    from .utils.category_utils import normalize_category
+    
+    df["normalized_category"] = df[category_column].apply(normalize_category)
 
     # Step 2: Detect and remove mislabeled samples
     removed_mislabeled = 0
     if remove_mislabeled:
         if verbose:
-            print("Step 2: Detecting mislabeled samples...")
+            logger.info("Step 2: Detecting mislabeled samples...")
 
         indices_to_remove = []
 
@@ -358,13 +328,13 @@ def clean_dataset(
             df = df.drop(indices_to_remove)
             removed_mislabeled = len(indices_to_remove)
             if verbose:
-                print(f"  - Removed {removed_mislabeled} mislabeled samples")
+                logger.info(f"  - Removed {removed_mislabeled} mislabeled samples")
 
     # Step 3: Remove tiny categories
     removed_tiny = 0
     if remove_tiny_categories:
         if verbose:
-            print(
+            logger.info(
                 f"Step 3: Removing categories with < {min_samples_per_category} samples..."
             )
 
@@ -386,7 +356,7 @@ def clean_dataset(
             removed_tiny = before - len(df)
 
             if verbose:
-                print(
+                logger.info(
                     f"  - Removed {removed_tiny} samples from tiny categories: {tiny_categories}"
                 )
 
@@ -394,18 +364,18 @@ def clean_dataset(
     removed_dups = 0
     if remove_duplicates:
         if verbose:
-            print("Step 4: Removing duplicate resumes...")
+            logger.info("Step 4: Removing duplicate resumes...")
 
         before = len(df)
         df = df.drop_duplicates(subset=resume_column, keep="first")
         removed_dups = before - len(df)
 
         if verbose:
-            print(f"  - Removed {removed_dups} duplicate resumes")
+            logger.info(f"  - Removed {removed_dups} duplicate resumes")
 
     # Step 5: Validate against hierarchy
     if verbose:
-        print("Step 5: Validating categories against hierarchy...")
+        logger.info("Step 5: Validating categories against hierarchy...")
 
     valid_categories = set(get_all_leaf_categories())
     df_categories = set(df["normalized_category"].unique())
@@ -413,7 +383,7 @@ def clean_dataset(
     unknown = df_categories - valid_categories
     if unknown:
         if verbose:
-            print(f"  - Warning: Categories not in hierarchy: {unknown}")
+            logger.info(f"  - Warning: Categories not in hierarchy: {unknown}")
 
     # Final stats
     final_count = len(df)
@@ -431,16 +401,16 @@ def clean_dataset(
     )
 
     if verbose:
-        print(f"\n" + "=" * 70)
-        print("CLEANING SUMMARY")
-        print("=" * 70)
-        print(f"  Original samples:       {stats.original_count}")
-        print(f"  Removed mislabeled:     {stats.removed_mislabeled}")
-        print(f"  Removed tiny categories:{stats.removed_tiny_categories}")
-        print(f"  Removed duplicates:     {stats.removed_duplicates}")
-        print(f"  Final samples:          {stats.final_count}")
-        print(f"  Categories: {stats.categories_before} → {stats.categories_after}")
-        print("=" * 70)
+        logger.info(f"\n" + "=" * 70)
+        logger.info("CLEANING SUMMARY")
+        logger.info("=" * 70)
+        logger.info(f"  Original samples:       {stats.original_count}")
+        logger.info(f"  Removed mislabeled:     {stats.removed_mislabeled}")
+        logger.info(f"  Removed tiny categories:{stats.removed_tiny_categories}")
+        logger.info(f"  Removed duplicates:     {stats.removed_duplicates}")
+        logger.info(f"  Final samples:          {stats.final_count}")
+        logger.info(f"  Categories: {stats.categories_before} → {stats.categories_after}")
+        logger.info("=" * 70)
 
     return df, stats
 

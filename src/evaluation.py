@@ -8,6 +8,7 @@ from sklearn.metrics import (
 )
 import matplotlib
 matplotlib.use('Agg')
+from .utils.display_utils import print_file_saved
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -67,7 +68,7 @@ def plot_confusion_matrix(cm: np.ndarray, class_names: List[str],
     
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
-        print(f"Confusion matrix saved to: {save_path}")
+        print_file_saved(save_path, "Confusion matrix")
     
     plt.close()
 
@@ -96,7 +97,7 @@ def plot_class_distribution(labels: np.ndarray, class_names: List[str],
     
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
-        print(f"Class distribution saved to: {save_path}")
+        print_file_saved(save_path, "Class distribution")
     
     plt.close()
 

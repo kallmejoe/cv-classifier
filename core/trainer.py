@@ -48,6 +48,9 @@ from src.data_loader import (
     load_corpus_dataset,
     load_combined_datasets,
 )
+from src.utils.logging_utils import get_logger
+
+logger = get_logger()
 
 
 def plot_learning_curve(
@@ -60,7 +63,7 @@ def plot_learning_curve(
     random_state: int = 42,
 ):
     """Plot learning curve for overfitting detection."""
-    print("\nGenerating learning curve...")
+    logger.info("\nGenerating learning curve...")
 
     result = learning_curve(
         estimator,
@@ -129,7 +132,7 @@ def plot_learning_curve(
 
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches="tight")
-        print(f"Learning curve saved to: {save_path}")
+        logger.info(f"Learning curve saved to: {save_path}")
 
     plt.close()
 
@@ -165,12 +168,12 @@ def train_model(
     # Set random seed
     np.random.seed(config.random_state)
 
-    print("=" * 70)
-    print("RESUME CLASSIFICATION PIPELINE")
-    print(f"Dataset Mode: {dataset_mode.upper()}")
-    print(f"Augmentation: {'ON' if config.use_augmentation else 'OFF'}")
-    print(f"Ensemble: {'ON' if config.use_ensemble else 'OFF'}")
-    print("=" * 70)
+    logger.info("=" * 70)
+    logger.info("RESUME CLASSIFICATION PIPELINE")
+    logger.info(f"Dataset Mode: {dataset_mode.upper()}")
+    logger.info(f"Augmentation: {'ON' if config.use_augmentation else 'OFF'}")
+    logger.info(f"Ensemble: {'ON' if config.use_ensemble else 'OFF'}")
+    logger.info("=" * 70)
 
     # Ensure output directories exist
     paths.ensure_dirs()
@@ -178,9 +181,9 @@ def train_model(
     # =========================================================================
     # STEP 1: Load Dataset
     # =========================================================================
-    print("\n" + "-" * 70)
-    print("STEP 1: Loading Dataset")
-    print("-" * 70)
+    logger.info("\n" + "-" * 70)
+    logger.info("STEP 1: Loading Dataset")
+    logger.info("-" * 70)
 
     if dataset_mode == "clean":
         df = get_clean_dataset(include_corpus=True, verbose=True)
@@ -200,38 +203,38 @@ def train_model(
             f"Use 'clean', 'resume', 'updated', 'corpus', 'both', or 'all'"
         )
 
-    print(f"\nDataset Statistics:")
-    print(f"  - Total samples: {len(df)}")
-    print(f"  - Categories: {len(df['Category'].unique())}")
-    print(f"  - Average resume length: {df['Resume'].str.len().mean():.0f} characters")
+    logger.info(f"\nDataset Statistics:")
+    logger.info(f"  - Total samples: {len(df)}")
+    logger.info(f"  - Categories: {len(df['Category'].unique())}")
+    logger.info(f"  - Average resume length: {df['Resume'].str.len().mean():.0f} characters")
 
     # =========================================================================
     # STEP 2: Text Preprocessing
     # =========================================================================
-    print("\n" + "-" * 70)
-    print("STEP 2: Preprocessing Text Data")
-    print("-" * 70)
+    logger.info("\n" + "-" * 70)
+    logger.info("STEP 2: Preprocessing Text Data")
+    logger.info("-" * 70)
 
     raw_texts = df["Resume"].tolist()
     labels = df["Category"].tolist()
 
-    print("Applying preprocessing pipeline...")
+    logger.info("Applying preprocessing pipeline...")
     processed_texts = preprocess_corpus(
         raw_texts, remove_stops=True, min_token_length=2
     )
 
-    print(f"\nPreprocessing complete:")
-    print(f"  - Original avg length: {np.mean([len(t) for t in raw_texts]):.0f} chars")
-    print(
+    logger.info(f"\nPreprocessing complete:")
+    logger.info(f"  - Original avg length: {np.mean([len(t) for t in raw_texts]):.0f} chars")
+    logger.info(
         f"  - Processed avg length: {np.mean([len(t) for t in processed_texts]):.0f} chars"
     )
 
     # =========================================================================
     # STEP 3: Train/Test Split
     # =========================================================================
-    print("\n" + "-" * 70)
-    print("STEP 3: Train/Test Split")
-    print("-" * 70)
+    logger.info("\n" + "-" * 70)
+    logger.info("STEP 3: Train/Test Split")
+    logger.info("-" * 70)
 
     texts_train, texts_test, labels_train, labels_test = train_test_split(
         processed_texts,
@@ -241,19 +244,19 @@ def train_model(
         stratify=labels,
     )
 
-    print(f"\nData split (stratified):")
-    print(
+    logger.info(f"\nData split (stratified):")
+    logger.info(
         f"  - Training set: {len(texts_train)} samples ({100*(1-config.test_size):.0f}%)"
     )
-    print(f"  - Test set: {len(texts_test)} samples ({100*config.test_size:.0f}%)")
+    logger.info(f"  - Test set: {len(texts_test)} samples ({100*config.test_size:.0f}%)")
 
     # =========================================================================
     # STEP 4: Optional Data Augmentation
     # =========================================================================
     if config.use_augmentation:
-        print("\n" + "-" * 70)
-        print("STEP 4: Data Augmentation")
-        print("-" * 70)
+        logger.info("\n" + "-" * 70)
+        logger.info("STEP 4: Data Augmentation")
+        logger.info("-" * 70)
 
         augmenter = TextAugmenter(random_state=config.random_state)
         texts_train, labels_train = augmenter.augment_dataset(
@@ -263,18 +266,18 @@ def train_model(
             methods=config.augmentation_methods,
         )
 
-        print(f"\nAugmented training set: {len(texts_train)} samples")
+        logger.info(f"\nAugmented training set: {len(texts_train)} samples")
     else:
-        print("\n" + "-" * 70)
-        print("STEP 4: Data Augmentation - SKIPPED")
-        print("-" * 70)
+        logger.info("\n" + "-" * 70)
+        logger.info("STEP 4: Data Augmentation - SKIPPED")
+        logger.info("-" * 70)
 
     # =========================================================================
     # STEP 5: Feature Extraction
     # =========================================================================
-    print("\n" + "-" * 70)
-    print("STEP 5: Feature Extraction (TF-IDF + N-grams)")
-    print("-" * 70)
+    logger.info("\n" + "-" * 70)
+    logger.info("STEP 5: Feature Extraction (TF-IDF + N-grams)")
+    logger.info("-" * 70)
 
     feature_extractor = FeatureExtractor(
         max_features=config.max_features,
@@ -295,12 +298,12 @@ def train_model(
     num_classes = feature_extractor.get_num_classes()
     class_names = feature_extractor.get_label_names()
 
-    print(f"\nFeature space:")
-    print(f"  - Total vocabulary size: {vocab_size} terms")
-    print(f"  - Training matrix: {X_train.shape}")
-    print(f"  - Test matrix: {X_test.shape}")
-    print(f"  - Number of classes: {num_classes}")
-    print(
+    logger.info(f"\nFeature space:")
+    logger.info(f"  - Total vocabulary size: {vocab_size} terms")
+    logger.info(f"  - Training matrix: {X_train.shape}")
+    logger.info(f"  - Test matrix: {X_test.shape}")
+    logger.info(f"  - Number of classes: {num_classes}")
+    logger.info(
         f"  - Sparsity: {100 * (1 - X_train.nnz / (X_train.shape[0] * X_train.shape[1])):.2f}%"
     )
 
@@ -314,19 +317,19 @@ def train_model(
     # =========================================================================
     # STEP 6: Model Training
     # =========================================================================
-    print("\n" + "-" * 70)
-    print("STEP 6: Model Training")
-    print("-" * 70)
+    logger.info("\n" + "-" * 70)
+    logger.info("STEP 6: Model Training")
+    logger.info("-" * 70)
 
     if config.use_ensemble:
-        print(f"\nTraining enhanced ensemble...")
+        logger.info(f"\nTraining enhanced ensemble...")
         all_classifiers = tune_all_classifiers(X_train, y_train, config, fast_mode=True)
         best_model = create_enhanced_ensemble(
             all_classifiers, X_train, y_train, config, top_n=3
         )
         model_name = "Enhanced Ensemble"
     else:
-        print(f"\nTraining single model with hyperparameter tuning...")
+        logger.info(f"\nTraining single model with hyperparameter tuning...")
         best_svm, best_lr, best_nb = tune_hyperparameters(X_train, y_train, config)
 
         svm_score = cross_val_score(
@@ -342,15 +345,15 @@ def train_model(
         best_model = models[best_model_key]
         model_name = best_model_key
 
-        print(f"\nBest single model: {model_name} (CV: {scores[best_model_key]:.4f})")
+        logger.info(f"\nBest single model: {model_name} (CV: {scores[best_model_key]:.4f})")
         best_model.fit(X_train, y_train)
 
     # =========================================================================
     # STEP 7: Learning Curve Analysis
     # =========================================================================
-    print("\n" + "-" * 70)
-    print("STEP 7: Learning Curve Analysis")
-    print("-" * 70)
+    logger.info("\n" + "-" * 70)
+    logger.info("STEP 7: Learning Curve Analysis")
+    logger.info("-" * 70)
 
     train_scores, val_scores = plot_learning_curve(
         best_model,
@@ -365,9 +368,9 @@ def train_model(
     # =========================================================================
     # STEP 8: Test Set Evaluation
     # =========================================================================
-    print("\n" + "-" * 70)
-    print("STEP 8: Final Evaluation on Test Set")
-    print("-" * 70)
+    logger.info("\n" + "-" * 70)
+    logger.info("STEP 8: Final Evaluation on Test Set")
+    logger.info("-" * 70)
 
     y_pred = best_model.predict(X_test)
     results = evaluate_model(y_test, y_pred, class_names)
@@ -388,32 +391,32 @@ def train_model(
     # =========================================================================
     # STEP 9: Save Model
     # =========================================================================
-    print("\n" + "-" * 70)
-    print("STEP 9: Saving Model")
-    print("-" * 70)
+    logger.info("\n" + "-" * 70)
+    logger.info("STEP 9: Saving Model")
+    logger.info("-" * 70)
 
     save_model(best_model, feature_extractor, paths)
 
     # =========================================================================
     # Summary
     # =========================================================================
-    print("\n" + "-" * 70)
-    print("FINAL RESULTS SUMMARY")
-    print("-" * 70)
+    logger.info("\n" + "-" * 70)
+    logger.info("FINAL RESULTS SUMMARY")
+    logger.info("-" * 70)
 
-    print(f"\nBest Model: {model_name}")
-    print(
+    logger.info(f"\nBest Model: {model_name}")
+    logger.info(
         f"  - Test Accuracy: {results['accuracy']:.4f} ({results['accuracy']*100:.2f}%)"
     )
-    print(f"  - Weighted F1-Score: {results['f1_weighted']:.4f}")
-    print(f"  - Macro F1-Score: {results['f1_macro']:.4f}")
+    logger.info(f"  - Weighted F1-Score: {results['f1_weighted']:.4f}")
+    logger.info(f"  - Macro F1-Score: {results['f1_macro']:.4f}")
 
-    print(f"\nOutput files saved to:")
-    print(f"  - {paths.output_dir}/")
-    print(f"  - {paths.model_dir}/")
+    logger.info(f"\nOutput files saved to:")
+    logger.info(f"  - {paths.output_dir}/")
+    logger.info(f"  - {paths.model_dir}/")
 
-    print("\n" + "=" * 70)
-    print("Pipeline completed successfully!")
-    print("=" * 70)
+    logger.info("\n" + "=" * 70)
+    logger.info("Pipeline completed successfully!")
+    logger.info("=" * 70)
 
     return results, best_model, feature_extractor

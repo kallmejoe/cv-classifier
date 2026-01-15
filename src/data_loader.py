@@ -8,6 +8,10 @@ import os
 from dataclasses import dataclass
 from typing import Optional, List, cast
 import pandas as pd
+from .utils.dataframe_utils import clean_dataframe, validate_file_exists
+from .utils.logging_utils import get_logger
+
+logger = get_logger()
 
 
 @dataclass
@@ -48,10 +52,9 @@ def load_resume_csv(
     file_path = file_path or config.resume_csv
     
     if config.verbose:
-        print(f"Loading Resume.csv from: {file_path}")
+        logger.info(f"Loading Resume.csv from: {file_path}")
     
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"Dataset not found: {file_path}")
+    validate_file_exists(file_path, "Dataset")
         
     df: pd.DataFrame = pd.read_csv(file_path)
     
@@ -59,22 +62,7 @@ def load_resume_csv(
     df = df[[config.resume_text_column, config.category_column]].copy()
     df.columns = pd.Index(['Resume', 'Category'])
     
-    original_count = len(df)
-    
-    if config.remove_duplicates:
-        df = df.drop_duplicates(subset='Resume', keep='first')
-    
-    if config.drop_na:
-        df = df.dropna()
-    
-    if config.verbose:
-        duplicates = original_count - len(df)
-        print(f"  - Original: {original_count} samples")
-        print(f"  - Duplicates removed: {duplicates}")
-        num_categories = len(df['Category'].unique())
-        print(f"  - Cleaned: {len(df)} samples, {num_categories} categories")
-    
-    return df
+    return clean_dataframe(df, config)
 
 
 def load_updated_resume_csv(
@@ -95,33 +83,13 @@ def load_updated_resume_csv(
     file_path = file_path or config.updated_csv
     
     if config.verbose:
-        print(f"Loading UpdatedResumeDataSet.csv from: {file_path}")
+        logger.info(f"Loading UpdatedResumeDataSet.csv from: {file_path}")
     
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"Dataset not found: {file_path}")
+    validate_file_exists(file_path, "Dataset")
     
     df: pd.DataFrame = pd.read_csv(file_path)
     
-    original_count = len(df)
-    
-    if config.remove_duplicates:
-        duplicates = df.duplicated(subset='Resume', keep='first')
-        dup_count = int(duplicates.sum())
-        df = df.drop_duplicates(subset='Resume', keep='first')
-    else:
-        dup_count = 0
-    
-    if config.drop_na:
-        df = df.dropna()
-    
-    if config.verbose:
-        print(f"  - Original: {original_count} samples")
-        if dup_count > 0:
-            print(f"  - Duplicates: {dup_count} ({100 * dup_count / original_count:.1f}%)")
-        num_categories = len(df['Category'].unique())
-        print(f"  - Cleaned: {len(df)} samples, {num_categories} categories")
-    
-    return df
+    return clean_dataframe(df, config)
 
 
 def load_corpus_dataset(
@@ -142,7 +110,7 @@ def load_corpus_dataset(
     file_path = file_path or config.corpus_csv
     
     if config.verbose:
-        print(f"Loading ResumesCorpusDataSet.csv from: {file_path}")
+        logger.info(f"Loading ResumesCorpusDataSet.csv from: {file_path}")
     
     if not os.path.exists(file_path):
         raise FileNotFoundError(
@@ -157,22 +125,7 @@ def load_corpus_dataset(
     else:
         raise ValueError(f"Expected 'Category' and 'Resume' columns in {file_path}")
     
-    original_count = len(df)
-    
-    if config.remove_duplicates:
-        df = df.drop_duplicates(subset='Resume', keep='first')
-    
-    if config.drop_na:
-        df = df.dropna()
-    
-    if config.verbose:
-        duplicates = original_count - len(df)
-        print(f"  - Original: {original_count} samples")
-        print(f"  - Duplicates removed: {duplicates}")
-        num_categories = len(df['Category'].unique())
-        print(f"  - Cleaned: {len(df)} samples, {num_categories} categories")
-    
-    return df
+    return clean_dataframe(df, config)
 
 
 def load_combined_datasets(
@@ -196,7 +149,7 @@ def load_combined_datasets(
     config = config or DatasetConfig()
     
     if config.verbose:
-        print("Loading and combining datasets...")
+        logger.info("Loading and combining datasets...")
     
     datasets: List[pd.DataFrame] = []
     
@@ -215,23 +168,21 @@ def load_combined_datasets(
     if not datasets:
         raise ValueError("No datasets found to load")
     
-    # Combine datasets
     df_combined: pd.DataFrame = pd.concat(datasets, ignore_index=True)
     
     if config.verbose:
-        print(f"\nCombined: {len(df_combined)} samples")
+        logger.info(f"Combined: {len(df_combined)} samples")
     
-    # Remove duplicates across all datasets
     if config.remove_duplicates:
         before_count = len(df_combined)
         df_combined = df_combined.drop_duplicates(subset='Resume', keep='first')
         cross_dups = before_count - len(df_combined)
         
         if config.verbose:
-            print(f"  - Cross-dataset duplicates: {cross_dups}")
+            logger.info(f"  Cross-dataset duplicates: {cross_dups}")
     
     if config.verbose:
         num_categories = len(df_combined['Category'].unique())
-        print(f"  - Final combined: {len(df_combined)} samples, {num_categories} categories")
+        logger.info(f"  Final combined: {len(df_combined)} samples, {num_categories} categories")
     
     return df_combined
