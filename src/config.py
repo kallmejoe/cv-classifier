@@ -129,6 +129,26 @@ class PredictionConfig:
     medium_confidence_threshold: float = 0.4
 
 
+@dataclass
+class DatasetConfig:
+    """Configuration for dataset loading."""
+    resume_csv: str = 'Resume.csv'
+    updated_csv: str = 'UpdatedResumeDataSet.csv'
+    corpus_csv: str = 'ResumesCorpusDataSet.csv'
+    corpus_dir: str = 'resumes_corpus'
+
+    # Column mappings for different datasets
+    resume_text_column: str = 'Resume_str'
+    category_column: str = 'Category'
+
+    # Cleaning options
+    remove_duplicates: bool = True
+    drop_na: bool = True
+
+    # Verbose output
+    verbose: bool = True
+
+
 # Default configuration instances
 DEFAULT_MODEL_CONFIG = ModelConfig()
 DEFAULT_PATH_CONFIG = PathConfig()

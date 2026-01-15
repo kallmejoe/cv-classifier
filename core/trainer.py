@@ -144,23 +144,7 @@ def train_model(
     model_config: Optional[ModelConfig] = None,
     path_config: Optional[PathConfig] = None,
 ) -> Tuple[dict, object, FeatureExtractor]:
-    """
-    Train resume classification model.
 
-    Args:
-        dataset_mode: Dataset selection
-            - 'clean': Use cleaned dataset with corpus (RECOMMENDED)
-            - 'resume': Only Resume.csv
-            - 'updated': Only UpdatedResumeDataSet.csv
-            - 'corpus': Only ResumesCorpusDataSet.csv
-            - 'both': Resume.csv + UpdatedResumeDataSet.csv
-            - 'all': All three datasets combined
-        model_config: Model configuration
-        path_config: Path configuration
-
-    Returns:
-        Tuple of (results_dict, trained_model, feature_extractor)
-    """
     # Use provided configs or defaults
     config = model_config or DEFAULT_MODEL_CONFIG
     paths = path_config or DEFAULT_PATH_CONFIG

@@ -8,30 +8,11 @@ import os
 from dataclasses import dataclass
 from typing import Optional, List, cast
 import pandas as pd
+from src.config import DatasetConfig
 from .utils.dataframe_utils import clean_dataframe, validate_file_exists
 from .utils.logging_utils import get_logger
 
 logger = get_logger()
-
-
-@dataclass
-class DatasetConfig:
-    """Configuration for dataset loading."""
-    resume_csv: str = 'Resume.csv'
-    updated_csv: str = 'UpdatedResumeDataSet.csv'
-    corpus_csv: str = 'ResumesCorpusDataSet.csv'
-    corpus_dir: str = 'resumes_corpus'
-    
-    # Column mappings for different datasets
-    resume_text_column: str = 'Resume_str'  # Resume.csv uses Resume_str
-    category_column: str = 'Category'
-    
-    # Cleaning options
-    remove_duplicates: bool = True
-    drop_na: bool = True
-    
-    # Verbose output
-    verbose: bool = True
 
 
 def load_resume_csv(
